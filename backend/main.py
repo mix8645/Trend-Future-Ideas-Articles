@@ -1,8 +1,9 @@
-from fastapi import FastAPI, HTTPException, Depends, Security, status
+from fastapi import FastAPI, HTTPException, Depends, Security, status, BackgroundTasks
 from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import logging
+import uuid
 from dotenv import load_dotenv
 from llama_cpp import Llama
 from schemas import TopicRequest
@@ -72,82 +73,30 @@ CRITICAL OUTPUT RULES:
 6. Focus on customer value and business impact
 7. Maintain authentic, warm tone throughout"""
 
-@app.get("/")
-def read_root():
-    return {"status": "🚀 Jenosize AI Backend is running!"}
+# ตัวแปรสำหรับเก็บสถานะงาน (In-memory Storage)
+job_status = {}
 
-@app.get("/health")
-def health_check():
-    return {"status": "healthy", "model_loaded": llm is not None}
-
-@app.get("/model-status")
-def model_status():
-    return {
-        "model_loaded": llm is not None,
-        "model_path": MODEL_PATH,
-        "model_exists": os.path.exists(MODEL_PATH),
-    }
-
-@app.post("/generate-article")
-def generate_article(req: TopicRequest, api_key: str = Depends(verify_api_key)):
-    """
-    Generate article in English first, then translate to Thai using the same LLM 
-    to maintain context and brand tone perfectly.
-    """
-    if not llm:
-        raise HTTPException(status_code=500, detail="AI Model is not loaded properly.")
-
-    logger.info(f"Generating bilingual article - Topic: {req.topic}, Tone: {req.tone}")
-    
-    tone_params = {
-        "Casual": {"temperature": 0.75, "top_p": 0.88},
-        "Professional": {"temperature": 0.65, "top_p": 0.85},
-        "Visionary": {"temperature": 0.80, "top_p": 0.90},
-        "Urgent": {"temperature": 0.70, "top_p": 0.85},
-    }
-    
-    params = tone_params.get(req.tone, {"temperature": 0.70, "top_p": 0.85})
-
+def process_article_task(task_id: str, req: TopicRequest, params: dict):
+    """ฟังก์ชันทำงานเบื้องหลัง สำหรับสร้างและแปลบทความโดยไม่ให้ API หลักค้าง"""
     try:
         # 1. Generate English article
-        logger.info("Generating English article...")
-        eng_prompt = f"""{SYSTEM_PROMPT}
-
-Topic: {req.topic}
-Industry: {req.industry}
-Target Audience: {req.target_audience}
-Tone: {req.tone}
-{f"Reference: {req.source_url}" if req.source_url else ""}
-
-Write a SHORT and concise article (maximum 2-3 paragraphs):
-"""
+        logger.info(f"[Task {task_id}] Generating English article...")
+        eng_prompt = f"""{SYSTEM_PROMPT}\n\nTopic: {req.topic}\nIndustry: {req.industry}\nTarget Audience: {req.target_audience}\nTone: {req.tone}\n{f"Reference: {req.source_url}" if req.source_url else ""}\n\nWrite a SHORT and concise article (maximum 2-3 paragraphs):\n"""
 
         eng_output = llm(
             eng_prompt,
-            max_tokens=800, # ขยาย max_tokens
+            max_tokens=800,
             temperature=params["temperature"],
             top_p=params["top_p"],
             echo=False
         )
         
         eng_article = eng_output['choices'][0]['text'].strip()
-        logger.info("✅ English article generated!")
+        logger.info(f"[Task {task_id}] ✅ English article generated!")
 
-        # 2. Translate to Thai using LLM to maintain context
-        logger.info("Translating English to Thai using LLM for context awareness...")
-        
-        thai_prompt = f"""คุณคือนักแปลและนักเขียนบทความมืออาชีพของ Jenosize
-
-จงแปลบทความภาษาอังกฤษด้านล่างนี้เป็นภาษาไทย โดยมีเงื่อนไขดังนี้:
-1. รักษาความหมาย บริบท และโครงสร้างเดิมไว้ให้ครบถ้วน 100%
-2. ใช้ภาษาที่สละสลวย เป็นธรรมชาติ และอ่านง่ายสำหรับกลุ่ม {req.target_audience}
-3. คุมโทนการเขียนให้เป็นแบบ {req.tone}
-
-บทความต้นฉบับ:
-{eng_article}
-
-แปลเป็นภาษาไทย:
-"""
+        # 2. Translate to Thai
+        logger.info(f"[Task {task_id}] Translating English to Thai...")
+        thai_prompt = f"""คุณคือนักแปลและนักเขียนบทความมืออาชีพของ Jenosize\n\nจงแปลบทความภาษาอังกฤษด้านล่างนี้เป็นภาษาไทย โดยมีเงื่อนไขดังนี้:\n1. รักษาความหมาย บริบท และโครงสร้างเดิมไว้ให้ครบถ้วน 100%\n2. ใช้ภาษาที่สละสลวย เป็นธรรมชาติ และอ่านง่ายสำหรับกลุ่ม {req.target_audience}\n3. คุมโทนการเขียนให้เป็นแบบ {req.tone}\n\nบทความต้นฉบับ:\n{eng_article}\n\nแปลเป็นภาษาไทย:\n"""
 
         thai_output = llm(
             thai_prompt,
@@ -158,20 +107,57 @@ Write a SHORT and concise article (maximum 2-3 paragraphs):
         )
         
         thai_article = thai_output['choices'][0]['text'].strip()
-        logger.info("✅ Thai article generated (Context Maintained)!")
+        logger.info(f"[Task {task_id}] ✅ Thai article generated!")
         
-        return {
-            "topic": req.topic,
-            "industry": req.industry,
-            "target_audience": req.target_audience,
-            "tone": req.tone,
+        # บันทึกผลลัพธ์ลงใน memory
+        job_status[task_id] = {
+            "status": "success",
             "articles": {
                 "en": eng_article,
                 "th": thai_article
-            },
-            "status": "success"
+            }
         }
         
     except Exception as e:
-        logger.error(f"Generation Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Generation Error: {str(e)}")
+        logger.error(f"[Task {task_id}] Error: {str(e)}")
+        job_status[task_id] = {
+            "status": "error",
+            "detail": str(e)
+        }
+
+@app.get("/")
+def read_root():
+    return {"status": "🚀 Jenosize AI Backend is running!"}
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "model_loaded": llm is not None}
+
+@app.post("/generate-article")
+def generate_article(req: TopicRequest, background_tasks: BackgroundTasks, api_key: str = Depends(verify_api_key)):
+    """API หลักสำหรับรับ Request คืนค่า Task ID ทันทีเพื่อกัน Timeout"""
+    if not llm:
+        raise HTTPException(status_code=500, detail="AI Model is not loaded properly.")
+    
+    task_id = str(uuid.uuid4())
+    job_status[task_id] = {"status": "processing"}
+    
+    tone_params = {
+        "Casual": {"temperature": 0.75, "top_p": 0.88},
+        "Professional": {"temperature": 0.65, "top_p": 0.85},
+        "Visionary": {"temperature": 0.80, "top_p": 0.90},
+        "Urgent": {"temperature": 0.70, "top_p": 0.85},
+    }
+    params = tone_params.get(req.tone, {"temperature": 0.70, "top_p": 0.85})
+
+    # โยนงานไปทำเบื้องหลัง
+    background_tasks.add_task(process_article_task, task_id, req, params)
+    
+    return {"task_id": task_id, "status": "processing"}
+
+@app.get("/task-status/{task_id}")
+def get_task_status(task_id: str):
+    """API สำหรับ Frontend เข้ามาเช็กสถานะงาน"""
+    if task_id not in job_status:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return job_status[task_id]

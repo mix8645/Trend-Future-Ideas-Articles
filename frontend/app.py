@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import os
+import time
 from dotenv import load_dotenv
 
 # โหลด environment variables
@@ -74,7 +75,7 @@ with col2:
         else:
             with st.status("🚀 Initializing AI Engine...", expanded=True) as status:
                 try:
-                    st.write("🔍 Analyzing parameters and researching topic...")
+                    st.write("🔍 Sending request to AI Server...")
                     
                     headers = {
                         "X-API-Key": SERVICE_API_KEY,
@@ -89,30 +90,49 @@ with col2:
                         "source_url": source_url
                     }
                     
-                    st.write("✍️ Drafting English article & Translating to Thai...")
-                    st.write("*(This process takes a few minutes depending on article length)*")
-                    
-                    # เพิ่ม timeout เพื่อไม่ให้ requests ของ Python ตัดสายไปก่อน
+                    # 1. ยิงรับบัตรคิว (ใช้เวลาไม่กี่วินาที)
                     response = requests.post(
                         f"{API_URL}/generate-article", 
                         headers=headers, 
                         json=payload,
-                        timeout=900 
+                        timeout=30 
                     )
                     
                     if response.status_code == 200:
-                        data = response.json()
-                        articles = data.get("articles", {})
+                        task_id = response.json().get("task_id")
+                        st.write(f"🎫 Task ID received: `{task_id}`")
+                        st.info("AI is actively generating and translating your article in the background. Please wait, this may take a few minutes without timing out...")
                         
-                        st.session_state.eng_article = articles.get("en", "")
-                        st.session_state.thai_article = articles.get("th", "")
-                        
-                        status.update(label="✅ Articles Generated Successfully!", state="complete", expanded=False)
-                        
-                        # สั่งเคลียร์หน้าจอและแสดงผลเฉพาะเมื่อสำเร็จเท่านั้น
-                        st.session_state.is_generating = False
-                        st.rerun()
-                        
+                        # 2. วนลูปเช็กสถานะงาน (Polling)
+                        while True:
+                            time.sleep(5) # รอ 5 วินาทีก่อนถามใหม่
+                            
+                            status_res = requests.get(f"{API_URL}/task-status/{task_id}", timeout=10)
+                            
+                            if status_res.status_code == 200:
+                                task_data = status_res.json()
+                                
+                                if task_data["status"] == "success":
+                                    articles = task_data.get("articles", {})
+                                    st.session_state.eng_article = articles.get("en", "")
+                                    st.session_state.thai_article = articles.get("th", "")
+                                    
+                                    status.update(label="✅ Articles Generated Successfully!", state="complete", expanded=False)
+                                    st.session_state.is_generating = False
+                                    st.rerun()
+                                    break # ออกจากลูป
+                                    
+                                elif task_data["status"] == "error":
+                                    st.error(f"❌ Backend Generation Error: {task_data.get('detail')}")
+                                    status.update(label="❌ Error", state="error", expanded=True)
+                                    st.session_state.is_generating = False
+                                    break # ออกจากลูป
+                                    
+                            else:
+                                st.error("❌ Failed to fetch task status.")
+                                st.session_state.is_generating = False
+                                break
+                                
                     elif response.status_code == 401:
                         st.error("❌ Authentication Error: API Key mismatch or missing.")
                         status.update(label="❌ Error", state="error", expanded=True)
@@ -124,9 +144,7 @@ with col2:
                         st.session_state.is_generating = False
                         
                 except Exception as e:
-                    # ถ้าเกิด Timeout หรือโดนตัดสาย จะแสดง Error ค้างไว้ที่หน้านี้
-                    st.error(f"Timeout / Connection Error: {e}")
-                    st.info("⚠️ ระบบใช้เวลาประมวลผลนานเกินไปจนโดนตัดการเชื่อมต่อ")
+                    st.error(f"Connection Error: {e}")
                     status.update(label="❌ Connection Failed", state="error", expanded=True)
                     st.session_state.is_generating = False
 

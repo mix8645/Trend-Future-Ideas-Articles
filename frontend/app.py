@@ -72,7 +72,6 @@ with col2:
             st.session_state.is_generating = False
             st.rerun()
         else:
-            # ใช้ st.status เพื่อสร้าง UI แจ้งสถานะการทำงานที่ดูดีขึ้น
             with st.status("🚀 Initializing AI Engine...", expanded=True) as status:
                 try:
                     st.write("🔍 Analyzing parameters and researching topic...")
@@ -93,11 +92,12 @@ with col2:
                     st.write("✍️ Drafting English article & Translating to Thai...")
                     st.write("*(This process takes a few minutes depending on article length)*")
                     
-                    # ส่ง Request ไปที่ Backend
+                    # เพิ่ม timeout เพื่อไม่ให้ requests ของ Python ตัดสายไปก่อน
                     response = requests.post(
                         f"{API_URL}/generate-article", 
                         headers=headers, 
-                        json=payload
+                        json=payload,
+                        timeout=900 
                     )
                     
                     if response.status_code == 200:
@@ -107,23 +107,28 @@ with col2:
                         st.session_state.eng_article = articles.get("en", "")
                         st.session_state.thai_article = articles.get("th", "")
                         
-                        # อัปเดตกล่องสถานะเมื่อเสร็จสิ้น
                         status.update(label="✅ Articles Generated Successfully!", state="complete", expanded=False)
+                        
+                        # สั่งเคลียร์หน้าจอและแสดงผลเฉพาะเมื่อสำเร็จเท่านั้น
+                        st.session_state.is_generating = False
+                        st.rerun()
+                        
                     elif response.status_code == 401:
                         st.error("❌ Authentication Error: API Key mismatch or missing.")
                         status.update(label="❌ Error", state="error", expanded=True)
+                        st.session_state.is_generating = False
+                        
                     else:
                         st.error(f"Error {response.status_code}: {response.text}")
                         status.update(label="❌ Error", state="error", expanded=True)
+                        st.session_state.is_generating = False
                         
                 except Exception as e:
-                    st.error(f"Connection Error: {e}")
-                    st.info("Ensure Backend is running and reachable.")
+                    # ถ้าเกิด Timeout หรือโดนตัดสาย จะแสดง Error ค้างไว้ที่หน้านี้
+                    st.error(f"Timeout / Connection Error: {e}")
+                    st.info("⚠️ ระบบใช้เวลาประมวลผลนานเกินไปจนโดนตัดการเชื่อมต่อ")
                     status.update(label="❌ Connection Failed", state="error", expanded=True)
-            
-            # เมื่อทำงานเสร็จ คืนค่าสถานะปุ่มและสั่ง Rerun เพื่อแสดงผล
-            st.session_state.is_generating = False
-            st.rerun()
+                    st.session_state.is_generating = False
 
     # --- Display Articles from Session State ---
     if not st.session_state.is_generating and st.session_state.eng_article and st.session_state.thai_article:

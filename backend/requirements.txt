@@ -6,3 +6,4 @@ playwright
 python-dotenv
 pydantic
 llama-cpp-python
+huggingface-hub

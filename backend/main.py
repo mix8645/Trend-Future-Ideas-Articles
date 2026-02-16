@@ -47,7 +47,8 @@ try:
         model_path=MODEL_PATH,
         n_ctx=4096,
         n_threads=4,
-        verbose=False
+        verbose=False,
+        chat_format="chatml" # บังคับใช้ Chat Format ของ Qwen
     )
     logger.info("✅ Model loaded successfully!")
 except Exception as e:
@@ -65,48 +66,54 @@ Your writing style:
 - Grounded in reality (honest about both opportunities and challenges)
 
 CRITICAL OUTPUT RULES:
-1. Write ONLY the article content - no thinking, reasoning, or meta-commentary
-2. Start directly with a compelling markdown headline (#)
-3. Use proper markdown formatting (###, ####, bullet points)
-4. Include real-world examples and actionable insights
-5. Never explain your approach or process
-6. Focus on customer value and business impact
-7. Maintain authentic, warm tone throughout"""
+1. Write ONLY the article content - absolutely no thinking process, reasoning, or meta-commentary.
+2. Start directly with a compelling markdown headline (#).
+3. Use proper markdown formatting (###, ####, bullet points).
+4. Include real-world examples and actionable insights.
+5. Never explain your approach or process.
+6. Focus on customer value and business impact.
+7. Maintain authentic, warm tone throughout."""
 
 # ตัวแปรสำหรับเก็บสถานะงาน (In-memory Storage)
 job_status = {}
 
 def process_article_task(task_id: str, req: TopicRequest, params: dict):
-    """ฟังก์ชันทำงานเบื้องหลัง สำหรับสร้างและแปลบทความโดยไม่ให้ API หลักค้าง"""
+    """ฟังก์ชันทำงานเบื้องหลัง สำหรับสร้างและแปลบทความด้วย Chat Completion"""
     try:
         # 1. Generate English article
         logger.info(f"[Task {task_id}] Generating English article...")
-        eng_prompt = f"""{SYSTEM_PROMPT}\n\nTopic: {req.topic}\nIndustry: {req.industry}\nTarget Audience: {req.target_audience}\nTone: {req.tone}\n{f"Reference: {req.source_url}" if req.source_url else ""}\n\nWrite a SHORT and concise article (maximum 2-3 paragraphs):\n"""
+        
+        eng_messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": f"Topic: {req.topic}\nIndustry: {req.industry}\nTarget Audience: {req.target_audience}\nTone: {req.tone}\n{f'Reference: {req.source_url}' if req.source_url else ''}\n\nWrite a SHORT and concise article (maximum 2-3 paragraphs):"}
+        ]
 
-        eng_output = llm(
-            eng_prompt,
+        eng_output = llm.create_chat_completion(
+            messages=eng_messages,
             max_tokens=800,
             temperature=params["temperature"],
-            top_p=params["top_p"],
-            echo=False
+            top_p=params["top_p"]
         )
         
-        eng_article = eng_output['choices'][0]['text'].strip()
+        eng_article = eng_output['choices'][0]['message']['content'].strip()
         logger.info(f"[Task {task_id}] ✅ English article generated!")
 
         # 2. Translate to Thai
         logger.info(f"[Task {task_id}] Translating English to Thai...")
-        thai_prompt = f"""คุณคือนักแปลและนักเขียนบทความมืออาชีพของ Jenosize\n\nจงแปลบทความภาษาอังกฤษด้านล่างนี้เป็นภาษาไทย โดยมีเงื่อนไขดังนี้:\n1. รักษาความหมาย บริบท และโครงสร้างเดิมไว้ให้ครบถ้วน 100%\n2. ใช้ภาษาที่สละสลวย เป็นธรรมชาติ และอ่านง่ายสำหรับกลุ่ม {req.target_audience}\n3. คุมโทนการเขียนให้เป็นแบบ {req.tone}\n\nบทความต้นฉบับ:\n{eng_article}\n\nแปลเป็นภาษาไทย:\n"""
+        
+        thai_messages = [
+            {"role": "system", "content": "คุณคือนักแปลและนักเขียนบทความมืออาชีพของ Jenosize ตอบกลับเฉพาะเนื้อหาบทความภาษาไทยเท่านั้น ห้ามมีคำเกริ่นนำ ห้ามคิดวิเคราะห์ และห้ามอธิบายการทำงานของตนเองเด็ดขาด"},
+            {"role": "user", "content": f"จงแปลบทความภาษาอังกฤษด้านล่างนี้เป็นภาษาไทย โดยรักษาความหมายเดิม ใช้ภาษาที่สละสลวยสำหรับกลุ่ม {req.target_audience} และคุมโทนการเขียนแบบ {req.tone}\n\nบทความต้นฉบับ:\n{eng_article}"}
+        ]
 
-        thai_output = llm(
-            thai_prompt,
+        thai_output = llm.create_chat_completion(
+            messages=thai_messages,
             max_tokens=1500,
             temperature=0.1,
-            top_p=0.9,
-            echo=False
+            top_p=0.9
         )
         
-        thai_article = thai_output['choices'][0]['text'].strip()
+        thai_article = thai_output['choices'][0]['message']['content'].strip()
         logger.info(f"[Task {task_id}] ✅ Thai article generated!")
         
         # บันทึกผลลัพธ์ลงใน memory

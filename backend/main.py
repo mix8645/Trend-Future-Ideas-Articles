@@ -124,7 +124,7 @@ Write the article:
 
         eng_output = llm(
             eng_prompt,
-            max_tokens=1500, # ขยาย max_tokens
+            max_tokens=800, # ขยาย max_tokens
             temperature=params["temperature"],
             top_p=params["top_p"],
             echo=False
@@ -151,7 +151,7 @@ Write the article:
 
         thai_output = llm(
             thai_prompt,
-            max_tokens=2500,
+            max_tokens=1500,
             temperature=0.1,
             top_p=0.9,
             echo=False

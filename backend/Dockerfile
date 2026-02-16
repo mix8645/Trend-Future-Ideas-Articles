@@ -16,10 +16,6 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 3. Install Playwright and Browser (Core for web scraping)
-RUN pip install --no-cache-dir playwright
-RUN playwright install chromium
-
 # 4. Copy application files
 COPY . .
 

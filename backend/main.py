@@ -42,7 +42,6 @@ MODEL_PATH = os.path.join(BASE_DIR, "model", "chinda-qwen3-4b.Q4_K_M.gguf")
 
 logger.info(f"⏳ Loading Local Model from: {MODEL_PATH}")
 try:
-    # เพิ่ม n_ctx เป็น 4096 เพื่อให้มีพื้นที่ Token เพียงพอสำหรับบทความภาษาอังกฤษ + คำแปลภาษาไทย
     llm = Llama(
         model_path=MODEL_PATH,
         n_ctx=4096,
@@ -152,8 +151,8 @@ Write the article:
 
         thai_output = llm(
             thai_prompt,
-            max_tokens=2500, # เผื่อ Token สำหรับภาษาไทยเยอะๆ ป้องกันการโดนตัดจบ
-            temperature=0.1, # ใช้ Temperature ต่ำเพื่อให้แปลตรงไปตรงมา ไม่มโนเนื้อหาเพิ่ม
+            max_tokens=2500,
+            temperature=0.1,
             top_p=0.9,
             echo=False
         )

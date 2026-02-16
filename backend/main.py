@@ -119,7 +119,7 @@ Target Audience: {req.target_audience}
 Tone: {req.tone}
 {f"Reference: {req.source_url}" if req.source_url else ""}
 
-Write the article:
+Write a SHORT and concise article (maximum 2-3 paragraphs):
 """
 
         eng_output = llm(

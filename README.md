@@ -1,7 +1,7 @@
 
 ---
 
-# 🚀 Jenosize Future Ideas Generator (Bilingual AI Writer)
+# 🚀 Jenosize Future Ideas Generator
 
 A sophisticated AI-driven article generation platform designed to create strategic business insights and future trends. This system produces high-quality content in both **English and Thai**, maintaining a consistent "human-centered" brand voice inspired by the Jenosize philosophy.
 
@@ -104,6 +104,72 @@ docker-compose up --build
 └── docker-compose.yml     # Container orchestration
 
 ```
+# Trend-Future-Ideas-Articles
+
+This project is a content generation platform that uses a fine-tuned language model to create articles based on a given topic, industry, target audience, and tone. The backend is a FastAPI application that serves the model, and the frontend is a Streamlit application that provides a user interface.
+
+## Documentation & Explanation
+
+### Approach and Model Selection
+
+The core of this project is a fine-tuned Large Language Model (LLM) designed to generate high-quality articles with a specific, human-centered brand voice for the company "Jenosize".
+
+**Model:** The model used is `mix8645/jenosize-qwen-model`, specifically the `chinda-qwen3-4b.Q4_K_M.gguf` file.
+
+*   **Rationale for Selection:**
+    *   **Quantization (Q4_K_M.gguf):** This is a 4-bit quantized model, which offers a good balance between performance and resource consumption. It allows the model to run efficiently on consumer-grade hardware without a significant loss in quality.
+    *   **Base Model (Qwen):** The Qwen family of models are known for their strong generative capabilities, especially in multilingual contexts.
+    *   **Fine-tuning:** The model has been presumably fine-tuned on Jenosize's internal data to capture its unique brand voice and writing style, emphasizing authentic, human-centered insights. *Note: The fine-tuning notebooks (`01_data_pipeline.ipynb`, `02_finetuning.ipynb`) are currently empty and do not contain the fine-tuning process code.*
+
+### API Deployment
+
+The application is containerized using Docker and can be easily deployed using Docker Compose.
+
+*   **Backend:** A FastAPI application that exposes the `/generate-article` endpoint. It downloads and loads the quantized GGUF model from Hugging Face Hub using the `llama-cpp-python` library.
+*   **Frontend:** A Streamlit application that provides a user-friendly interface to interact with the backend API.
+*   **Deployment:** The `docker-compose.yml` file orchestrates the deployment of both the frontend and backend services.
+
+## How to Run and Test
+
+### Prerequisites
+
+*   Docker and Docker Compose installed.
+*   An `.env` file with the required environment variables (see `.env.example` if available, or check the `docker-compose.yml`). You'll need to set the `SERVICE_API_KEY`.
+
+### Running the Application
+
+1.  **Create an `.env` file:**
+    Create a `.env` file in the root of the project and add the following:
+    ```
+    SERVICE_API_KEY=your_secret_api_key
+    ```
+2.  **Build and run the containers:**
+    ```bash
+    docker-compose up --build
+    ```
+3.  **Access the applications:**
+    *   **Frontend:** Open your browser and go to `http://localhost:8501`.
+    *   **Backend API Docs:** Open your browser and go to `http://localhost:8000/docs`.
+
+### Testing the API
+
+You can test the `/generate-article` endpoint using `curl` or any API client.
+
+```bash
+curl -X POST "http://localhost:8000/generate-article" \
+-H "Content-Type: application/json" \
+-H "X-API-Key: your_secret_api_key" \
+-d '{
+    "topic": "The Future of AI in Business",
+    "industry": "Technology",
+    "target_audience": "Business Leaders",
+    "tone": "Visionary",
+    "source_url": ""
+}'
+```
+
+This will return a JSON response containing the generated article in both English and Thai.
+
 
 ---
 

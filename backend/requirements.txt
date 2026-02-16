@@ -1,8 +1,6 @@
 fastapi
 uvicorn
 requests
-beautifulsoup4
-playwright
 python-dotenv
 pydantic
 llama-cpp-python

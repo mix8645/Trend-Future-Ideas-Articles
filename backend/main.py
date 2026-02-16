@@ -6,7 +6,6 @@ import logging
 from dotenv import load_dotenv
 from llama_cpp import Llama
 from schemas import TopicRequest
-from huggingface_hub import hf_hub_download  # เพิ่มบรรทัดนี้
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -37,15 +36,12 @@ def verify_api_key(api_key: str = Security(api_key_header)):
         )
     return api_key
 
-# --- Load Model from Hugging Face Hub ---
-logger.info("⏳ Downloading/Loading Model from Hugging Face Hub...")
+# --- Load Local GGUF Model ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "model", "chinda-qwen3-4b.Q4_K_M.gguf")
+
+logger.info(f"⏳ Loading Local Model from: {MODEL_PATH}")
 try:
-    # ดึงโมเดลจาก HF Hub อัตโนมัติ
-    MODEL_PATH = hf_hub_download(
-        repo_id="mix8645/jenosize-qwen-model", 
-        filename="chinda-qwen3-4b.Q4_K_M.gguf"
-    )
-    
     llm = Llama(
         model_path=MODEL_PATH,
         n_ctx=4096,
@@ -88,8 +84,8 @@ def health_check():
 def model_status():
     return {
         "model_loaded": llm is not None,
-        "model_path": MODEL_PATH if llm else None,
-        "model_exists": os.path.exists(MODEL_PATH) if llm else False,
+        "model_path": MODEL_PATH,
+        "model_exists": os.path.exists(MODEL_PATH),
     }
 
 @app.post("/generate-article")
@@ -128,7 +124,7 @@ Write the article:
 
         eng_output = llm(
             eng_prompt,
-            max_tokens=1500,
+            max_tokens=1500, # ขยาย max_tokens
             temperature=params["temperature"],
             top_p=params["top_p"],
             echo=False
